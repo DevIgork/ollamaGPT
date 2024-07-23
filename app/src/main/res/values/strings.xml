@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">Ollama chat</string>
+    <string name="title_activity_sigh_in">SighInActivity</string>
+    <string name="sing_in_main_text">Welcome To Ollama chat</string>
+    <string name="ollama_url">Enter your ollama url</string>
+    <string name="url">Url</string>
+    <string name="model_name">Model name</string>
+    <string name="enter_the_model_name">Enter the model name</string>
+    <string name="not_valid_url">Not valid url</string>
+    <string name="model_doesn_t_exist">model doesn\'t exist</string>
+    <string name="wrong_url_format">url must start with http or https and can\'t be blank</string>
+    <string name="title_activity_chat">ChatActivity</string>
+    <string name="type_a_message">Type a message...</string>
+</resources>
