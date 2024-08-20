@@ -49,9 +49,20 @@
 
 ## Screenshots 📸
 
-![Chat Screen](resources/chat_look.jpg)
-![Sign-In Screen](https://i.imgur.com/GEUqMPI.jpeg) *(To be removed in future updates)*
-![Example Video](resources/example.gif)
+**Chat Screen:**
+<br>
+<img src="resources/chat_look.jpg" alt="Chat Screen" width="300px">
+
+*(↓To be removed in future updates↓)*
+<br>
+**Sign-In Screen:**
+<br>
+<img src="https://i.imgur.com/GEUqMPI.jpeg" alt="Sign-In Screen" width="300px">
+
+**Example Video:**
+<br>
+<img src="resources/example.gif" alt="Example Video" width="300px">
+
 
 ---
 
