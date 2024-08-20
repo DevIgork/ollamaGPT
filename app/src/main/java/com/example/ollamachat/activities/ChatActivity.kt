@@ -3,15 +3,21 @@ package com.example.ollamachat.activities
 import ChatAdapter
 import android.app.Activity
 import android.content.Context
+import android.graphics.PorterDuff
 import android.os.Bundle
+import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.example.ollamachat.R
 import com.example.ollamachat.client.RetrofitClient
 import com.example.ollamachat.databinding.ActivityChatBinding
-import com.example.ollamachat.dto.OllamaRequest
+import com.example.ollamachat.dto.Messages
+import com.example.ollamachat.dto.OllamaRequestChat
 import com.example.ollamachat.model.ChatMessage
 import com.example.ollamachat.service.ApiService
 import kotlinx.coroutines.Dispatchers
@@ -22,70 +28,109 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var binding: ActivityChatBinding
     private lateinit var chatAdapter: ChatAdapter
     private lateinit var chatMessages: MutableList<ChatMessage>
+    private lateinit var ollamaRequestChat: OllamaRequestChat
     private lateinit var baseUrl: String
     private lateinit var modelName: String
-    private lateinit var sendButton: FrameLayout
+    private lateinit var shortModelName: String
     private val senderId = "1"
     private val receiverId = "2"
+    private var messagesList: MutableList<Messages> = mutableListOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityChatBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        init()
+        initialize()
         setListeners()
     }
 
-    private fun init() {
-        sendButton = binding.layoutSend
-        chatMessages = ArrayList()
+    private fun initialize() {
+        chatMessages = mutableListOf()
         chatAdapter = ChatAdapter(chatMessages, senderId)
-        binding.chatRecyclerView.layoutManager = LinearLayoutManager(this)
-        binding.chatRecyclerView.adapter = chatAdapter
-        val intent = intent
-        baseUrl = intent.getStringExtra("BASE_URL") ?: ""
+        binding.chatRecyclerView.apply {
+            layoutManager = LinearLayoutManager(this@ChatActivity)
+            adapter = chatAdapter
+        }
+        baseUrl = intent.getStringExtra("SERVER_URL") ?: ""
         modelName = intent.getStringExtra("MODEL_NAME") ?: ""
+        shortModelName = shortenModelName()
         binding.titleName.text = modelName
+        ollamaRequestChat = OllamaRequestChat(modelName, listOf(), false)
     }
 
     private fun setListeners() {
-        binding.imageBack.setOnClickListener {
-            onBackPressedDispatcher.onBackPressed()
+        binding.apply {
+            imageBack.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
+            imageInfo.setOnClickListener { showToast("Work in progress") } // TODO: Show model info
+            attachIcon.setOnClickListener { showToast("Work in progress") } // TODO: Attach photo
+            layoutSend.setOnClickListener { handleSendMessage() }
         }
+    }
 
-        sendButton.setOnClickListener {
-            sendButton.isEnabled = false
+    private fun handleSendMessage() {
+        val message = binding.inputMessage.text.toString().trim()
+        if (message.isNotEmpty()) {
+            disableSendButton()
             hideKeyboard(this)
-            val message = binding.inputMessage.text.toString().trim()
+            updateTypingIndicator()
             binding.inputMessage.text.clear()
-            if (message.isNotEmpty()) {
-                sendMessage(message, senderId)
-                val apiService =
-                    RetrofitClient.getClient(baseUrl).create(ApiService::class.java)
-                lifecycleScope.launch {
-                    var promptResult = sendRequest(message, apiService)
-                    sendMessage(promptResult, receiverId)
-                    sendButton.isEnabled = true
-                }
+            sendMessage(message, senderId)
+            lifecycleScope.launch {
+                val apiService = RetrofitClient.getClient(baseUrl).create(ApiService::class.java)
+                val response = sendRequest(apiService)
+                sendMessage(response, receiverId)
+                enableSendButton()
+                hideTypingIndicator()
             }
         }
     }
 
+    private fun disableSendButton() {
+        binding.layoutSend.apply {
+            isEnabled = false
+            binding.sendIcon.setColorFilter(ContextCompat.getColor(this@ChatActivity, R.color.unavailable), PorterDuff.Mode.SRC_IN)
+        }
+    }
+
+    private fun enableSendButton() {
+        binding.layoutSend.apply {
+            isEnabled = true
+            binding.sendIcon.setColorFilter(ContextCompat.getColor(this@ChatActivity, R.color.white), PorterDuff.Mode.SRC_IN)
+        }
+    }
+
+    private fun updateTypingIndicator() {
+        binding.apply {
+            ollamaTypingText.text = "$shortModelName is typing"
+            modelTypingLayout.visibility = View.VISIBLE
+        }
+    }
+
+    private fun hideTypingIndicator() {
+        binding.modelTypingLayout.visibility = View.GONE
+    }
+
+    private fun shortenModelName(): String {
+        return modelName.split(":").firstOrNull() ?: modelName
+    }
+
     private fun sendMessage(message: String, id: String) {
-        val chatMessage = ChatMessage(message, id)
-        chatMessages.add(chatMessage)
+        val messageType = if (id == senderId) "user" else "assistant"
+        messagesList.add(Messages(messageType, message))
+        chatMessages.add(ChatMessage(message, id))
         chatAdapter.notifyItemInserted(chatMessages.size - 1)
         binding.chatRecyclerView.smoothScrollToPosition(chatMessages.size - 1)
     }
 
-    suspend fun sendRequest(prompt: String, apiService: ApiService): String {
+    private suspend fun sendRequest(apiService: ApiService): String {
         return withContext(Dispatchers.IO) {
             try {
-                val response = apiService.sendRequest(OllamaRequest(modelName, prompt, false)).execute()
-                if (response.isSuccessful && response.body() != null) {
-                    response.body()!!.response
+                ollamaRequestChat.messages = messagesList
+                val response = apiService.sendRequest(ollamaRequestChat).execute()
+                if (response.isSuccessful) {
+                    response.body()?.message?.content ?: "No content"
                 } else {
-                    "error"
+                    response.errorBody()?.source()?.toString() ?: "Error"
                 }
             } catch (e: Exception) {
                 "error: ${e.message}"
@@ -99,5 +144,9 @@ class ChatActivity : AppCompatActivity() {
         currentFocus?.let {
             inputMethodManager.hideSoftInputFromWindow(it.windowToken, 0)
         }
+    }
+
+    private fun showToast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 }
