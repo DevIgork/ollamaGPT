@@ -51,7 +51,7 @@
 
 ![Chat Screen](resources/chat_look.jpg)
 ![Sign-In Screen](https://i.imgur.com/GEUqMPI.jpeg) *(To be removed in future updates)*
-![Example Video](resources/example.mp4)
+![Example Video](resources/example.gif)
 
 ---
 
