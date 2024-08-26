@@ -7,66 +7,73 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.View
-import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.ollamachat.client.RetrofitClient
 import com.example.ollamachat.databinding.ActivitySignInBinding
 import com.example.ollamachat.service.ApiService
-import com.makeramen.roundedimageview.BuildConfig
 import kotlinx.coroutines.*
 import retrofit2.HttpException
 
 class SignInActivity : AppCompatActivity() {
-    private lateinit var enterButton: Button
     private lateinit var binding: ActivitySignInBinding
     private lateinit var baseUrl: String
     private lateinit var modelName: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        System.setProperty("kotlinx.coroutines.debug", if(BuildConfig.DEBUG) "on" else "off")
         binding = ActivitySignInBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        init()
         setListeners()
     }
 
     private fun setListeners() {
-        enterButton.setOnClickListener {
-            hideErrors()
-            initText()
-            if (checkUrl()) {
-                return@setOnClickListener
-            }
-            CoroutineScope(Dispatchers.Main).launch {
-                val apiService = RetrofitClient.getClient(baseUrl).create(ApiService::class.java)
-                val passedUrlTestDeferred = async(Dispatchers.IO) { checkStatus(apiService) }
-                val passedModelTestDeferred = async(Dispatchers.IO) { checkModel(modelName, apiService) }
-                val passedUrlTest = passedUrlTestDeferred.await()
-                val passedModelTest = passedModelTestDeferred.await()
-                if (passedUrlTest && passedModelTest) {
-                    val intent = Intent(this@SignInActivity, ChatActivity::class.java).apply {
-                        putExtra("BASE_URL", baseUrl)
-                        putExtra("MODEL_NAME", modelName)
-                    }
-                    startActivity(intent)
-                } else {
-                    if (!passedUrlTest) {
-                        vibrate()
-                        binding.urlError.visibility = View.VISIBLE
-                    }
-                    if (!passedModelTest) {
-                        vibrate()
-                        binding.modelError.visibility = View.VISIBLE
-                    }
-                }
+        binding.buttonEnter.setOnClickListener { handleSignIn() }
+    }
+
+    private fun handleSignIn() {
+        hideErrors()
+        initText()
+        if (!checkUrl()) return
+
+        CoroutineScope(Dispatchers.Main).launch {
+            val serverUrl = getServerUrl()
+            val apiService = RetrofitClient.getClient(serverUrl).create(ApiService::class.java)
+            val passedUrlTest = async(Dispatchers.IO) { checkStatus(apiService) }.await()
+            val passedModelTest = async(Dispatchers.IO) { checkModel(modelName, apiService) }.await()
+
+            if (passedUrlTest && passedModelTest) {
+                navigateToChatActivity(serverUrl)
+            } else {
+                handleErrors(passedUrlTest, passedModelTest)
             }
         }
     }
 
-    private fun init() {
-        enterButton = binding.buttonEnter
+    private fun getServerUrl(): String {
+        return when {
+            baseUrl.startsWith("http") || baseUrl.startsWith("https") -> baseUrl
+            else -> "http://$baseUrl/"
+        }
+    }
+
+    private fun navigateToChatActivity(serverUrl: String) {
+        val intent = Intent(this, ChatActivity::class.java).apply {
+            putExtra("SERVER_URL", serverUrl)
+            putExtra("MODEL_NAME", modelName)
+        }
+        startActivity(intent)
+    }
+
+    private fun handleErrors(passedUrlTest: Boolean, passedModelTest: Boolean) {
+        if (!passedUrlTest) {
+            vibrate()
+            binding.urlError.visibility = View.VISIBLE
+        }
+        if (passedUrlTest && !passedModelTest) {
+            vibrate()
+            binding.modelError.visibility = View.VISIBLE
+        }
     }
 
     private fun initText() {
@@ -78,7 +85,8 @@ class SignInActivity : AppCompatActivity() {
         val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         if (vibrator.hasVibrator()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
+                val vibrationEffect = VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE)
+                vibrator.vibrate(vibrationEffect)
             } else {
                 @Suppress("DEPRECATION")
                 vibrator.vibrate(500)
@@ -86,21 +94,22 @@ class SignInActivity : AppCompatActivity() {
         }
     }
 
+
     private fun hideErrors() {
         binding.urlError.visibility = View.GONE
         binding.urlErrorFormat.visibility = View.GONE
         binding.modelError.visibility = View.GONE
     }
 
-    private fun checkUrl() : Boolean {
-        if (baseUrl.isBlank() || (!baseUrl.startsWith("http") && !baseUrl.startsWith("https"))) {
+    private fun checkUrl(): Boolean {
+        return if (baseUrl.isBlank()) {
             vibrate()
             binding.urlErrorFormat.visibility = View.VISIBLE
-            return true
+            false
+        } else {
+            true
         }
-        return false
     }
-
 
     private fun checkStatus(apiService: ApiService): Boolean {
         return try {
@@ -117,7 +126,6 @@ class SignInActivity : AppCompatActivity() {
         return try {
             val response = apiService.getModels().execute()
             val models = response.body()?.models ?: return false
-
             val matchingModel = models.find { it.name.contains(modelName) }
             if (matchingModel != null) {
                 this.modelName = matchingModel.name
@@ -131,7 +139,6 @@ class SignInActivity : AppCompatActivity() {
             false
         }
     }
-
 
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
